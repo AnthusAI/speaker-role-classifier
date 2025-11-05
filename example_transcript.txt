@@ -1,0 +1,17 @@
+Speaker 0: Good afternoon, thank you for calling Premier Plumbing Services, this is Jennifer speaking. May I have your phone number please?
+Speaker 1: Hi Jennifer, yes it's 555-0147.
+Speaker 0: Thank you. I see you're calling from the number on file for Riverside Apartments. Is this Mr. Chen, the building manager?
+Speaker 1: Yes, that's correct. We have an emergency situation in one of our units.
+Speaker 0: I'm sorry to hear that. Which unit is experiencing the problem?
+Speaker 1: It's unit 3B. The tenant just called me - their kitchen sink is completely backed up and water is overflowing onto the floor.
+Speaker 0: Oh no, that does sound urgent. Is the water still running or have they been able to shut it off?
+Speaker 1: They managed to turn off the water under the sink, but there's already quite a bit of water on the floor.
+Speaker 0: Good thinking on their part. Let me pull up your service history... I see we were just out there last month for unit 2A. Now, for unit 3B, I can get a technician out there today. We have availability at 2:30 PM or 4:00 PM. Which works better?
+Speaker 1: 2:30 would be perfect. The tenant works from home so she'll be there.
+Speaker 0: Excellent. I'm scheduling our technician Mike for 2:30 PM today at Riverside Apartments, unit 3B, for an emergency kitchen sink backup with overflow. The tenant's name on file is...
+Speaker 1: Sarah Martinez.
+Speaker 0: Perfect, I've got that updated. Mike will call about 15 minutes before he arrives. Is there anything else I can help you with today?
+Speaker 1: No, that's everything. Thank you so much for getting someone out so quickly.
+Speaker 0: You're very welcome, Mr. Chen. We'll take good care of unit 3B. Have a great afternoon!
+Speaker 1: You too, thanks again. Bye.
+Speaker 0: Goodbye!
