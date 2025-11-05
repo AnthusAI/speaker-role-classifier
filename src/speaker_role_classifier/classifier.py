@@ -1,4 +1,4 @@
-"""Core speaker classification logic with configurable roles and logging."""
+"""Core speaker classification logic."""
 
 import os
 import json
@@ -7,7 +7,8 @@ from typing import Dict, List, Optional
 from openai import OpenAI
 from dotenv import load_dotenv
 
-# Load environment variables
+from .safeguard import run_safeguard_validation
+
 load_dotenv()
 
 
@@ -221,11 +222,11 @@ def classify_speakers(
         result_transcript = _replace_speakers(transcript, mapping, log)
     
     if enable_safeguard:
-        log.append({
-            'step': 'safeguard',
-            'status': 'not_yet_implemented'
-        })
-    
+        result_transcript = run_safeguard_validation(
+            result_transcript,
+            target_roles,
+            log
+        )
     return {
         'transcript': result_transcript,
         'log': log
