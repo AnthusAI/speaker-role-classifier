@@ -1,9 +1,9 @@
-"""Core speaker classification logic with advanced features."""
+"""Core speaker classification logic with configurable roles and logging."""
 
 import os
 import json
 import re
-from typing import Dict, List, Optional, Union
+from typing import Dict, List, Optional
 from openai import OpenAI
 from dotenv import load_dotenv
 
@@ -28,16 +28,7 @@ class SpeakerNotFoundError(Exception):
 
 
 def _extract_speaker_labels(transcript: str) -> set:
-    """
-    Extract all unique speaker labels from transcript.
-    
-    Args:
-        transcript: The transcript text
-        
-    Returns:
-        Set of speaker labels found in transcript
-    """
-    # Match any label followed by a colon
+    """Extract all unique speaker labels from transcript."""
     label_pattern = r'^([^:]+):'
     labels = set()
     
@@ -53,53 +44,33 @@ def _extract_speaker_labels(transcript: str) -> set:
 
 
 def _identify_non_target_labels(transcript: str, target_roles: List[str]) -> set:
-    """
-    Identify speaker labels that are not in the target roles list.
-    
-    Args:
-        transcript: The transcript text
-        target_roles: List of valid target role names
-        
-    Returns:
-        Set of labels that need to be replaced
-    """
+    """Identify speaker labels that are not in the target roles list."""
     all_labels = _extract_speaker_labels(transcript)
     non_target = {label for label in all_labels if label not in target_roles}
     return non_target
 
 
-def _call_gpt5_api(transcript: str, target_roles: Optional[List[str]] = None) -> Dict[str, str]:
+def _call_gpt5_api(transcript: str, target_roles: List[str], labels_to_map: set, log: List[Dict]) -> Dict[str, str]:
     """
-    Call GPT-5 API to classify speakers.
+    Call GPT-5 API to map speaker labels to target roles.
     
     Args:
-        transcript: The diarized transcript to classify
-        target_roles: List of target role names (default: ["Agent", "Customer"])
+        transcript: The transcript to analyze
+        target_roles: List of target role names
+        labels_to_map: Set of labels that need to be mapped
+        log: Log list to append to
         
     Returns:
-        Dictionary mapping speaker labels to roles
-        
-    Raises:
-        InvalidJSONResponseError: If the API response is not valid JSON
+        Dictionary mapping speaker labels to target roles
     """
-    if target_roles is None:
-        target_roles = ["Agent", "Customer"]
-    
     api_key = os.getenv('OPENAI_API_KEY')
     if not api_key:
         raise ValueError("OPENAI_API_KEY environment variable is not set")
     
     client = OpenAI(api_key=api_key)
     
-    # Identify which labels need mapping
-    non_target_labels = _identify_non_target_labels(transcript, target_roles)
-    
-    if not non_target_labels:
-        # No labels to map, return empty mapping
-        return {}
-    
     role_desc = " and ".join(target_roles)
-    labels_str = ', '.join(sorted(non_target_labels))
+    labels_str = ', '.join(sorted(labels_to_map))
     
     prompt = f"""You are analyzing a conversation transcript. Your task is to identify which speaker has which role.
 
@@ -121,6 +92,12 @@ Example format:
   "Speaker 1": "{target_roles[1]}"
 }}"""
     
+    log.append({
+        'step': 'mapping_request',
+        'target_roles': target_roles,
+        'labels_to_map': list(labels_to_map)
+    })
+    
     try:
         response = client.chat.completions.create(
             model="gpt-5",
@@ -136,36 +113,27 @@ Example format:
             raise InvalidJSONResponseError("API returned empty response")
         
         mapping = json.loads(content)
+        
+        log.append({
+            'step': 'mapping_decision',
+            'mapping': mapping
+        })
+        
         return mapping
         
     except json.JSONDecodeError as e:
+        log.append({'step': 'error', 'error': f"JSON decode error: {str(e)}"})
         raise InvalidJSONResponseError(f"Failed to parse JSON response from API: {e}")
     except Exception as e:
+        log.append({'step': 'error', 'error': str(e)})
         if isinstance(e, InvalidJSONResponseError):
             raise
         raise InvalidJSONResponseError(f"API call failed: {e}")
 
 
-def _validate_mapping(transcript: str, mapping: Dict[str, str], target_roles: Optional[List[str]] = None) -> None:
-    """
-    Validate that the speaker mapping is complete and correct.
-    
-    Args:
-        transcript: The original transcript
-        mapping: Dictionary mapping speaker labels to roles
-        target_roles: List of valid target role names
-        
-    Raises:
-        MissingSpeakerMappingError: If not all speakers are mapped
-        SpeakerNotFoundError: If a mapped speaker doesn't exist in transcript
-    """
-    if target_roles is None:
-        target_roles = ["Agent", "Customer"]
-    
-    # Identify which labels need mapping
+def _validate_mapping(transcript: str, mapping: Dict[str, str], target_roles: List[str]) -> None:
+    """Validate that the speaker mapping is complete and correct."""
     non_target_labels = _identify_non_target_labels(transcript, target_roles)
-    
-    # Check if all non-target labels are mapped
     speakers_in_mapping = set(mapping.keys())
     
     unmapped_speakers = non_target_labels - speakers_in_mapping
@@ -174,7 +142,6 @@ def _validate_mapping(transcript: str, mapping: Dict[str, str], target_roles: Op
             f"Not all speakers are mapped. Missing: {', '.join(sorted(unmapped_speakers))}"
         )
     
-    # Check if any mapped speakers don't exist in transcript
     all_labels = _extract_speaker_labels(transcript)
     extra_speakers = speakers_in_mapping - all_labels
     if extra_speakers:
@@ -183,25 +150,29 @@ def _validate_mapping(transcript: str, mapping: Dict[str, str], target_roles: Op
         )
 
 
-def _replace_speakers(transcript: str, mapping: Dict[str, str]) -> str:
-    """
-    Replace speaker labels with roles in the transcript.
-    
-    Args:
-        transcript: The original transcript with speaker labels
-        mapping: Dictionary mapping speaker labels to roles
-        
-    Returns:
-        Transcript with speaker labels replaced by roles
-    """
+def _replace_speakers(transcript: str, mapping: Dict[str, str], log: List[Dict]) -> str:
+    """Replace speaker labels with roles in the transcript."""
     result = transcript
+    replacements_made = []
     
-    # Replace each speaker label with its role
-    # Sort by speaker label to ensure consistent replacement order
     for speaker_label in sorted(mapping.keys(), reverse=True):
         role = mapping[speaker_label]
-        # Replace "Speaker N:" with "Role:"
-        result = result.replace(f"{speaker_label}:", f"{role}:")
+        old_pattern = f"{speaker_label}:"
+        new_pattern = f"{role}:"
+        
+        if old_pattern in result:
+            count = result.count(old_pattern)
+            result = result.replace(old_pattern, new_pattern)
+            replacements_made.append({
+                'from': speaker_label,
+                'to': role,
+                'occurrences': count
+            })
+    
+    log.append({
+        'step': 'label_replacement',
+        'replacements': replacements_made
+    })
     
     return result
 
@@ -209,54 +180,30 @@ def _replace_speakers(transcript: str, mapping: Dict[str, str]) -> str:
 def classify_speakers(
     transcript: str,
     target_roles: Optional[List[str]] = None,
-    enable_safeguard: bool = False,
-    validate_only: bool = False,
-    return_dict: bool = False
-) -> Union[str, Dict]:
+    enable_safeguard: bool = False
+) -> Dict:
     """
-    Classify speakers in a diarized transcript.
+    Classify speakers in a transcript with configurable roles and logging.
     
     Args:
-        transcript: A diarized transcript with speaker labels
+        transcript: The transcript to classify
         target_roles: List of target role names (default: ["Agent", "Customer"])
         enable_safeguard: Whether to run validation safeguard (default: False)
-        validate_only: Only validate, don't do initial mapping (default: False)
-        return_dict: Return dict with transcript and log (default: False)
         
     Returns:
-        The transcript with speaker labels replaced by roles (or dict if return_dict=True)
-        
-    Raises:
-        InvalidJSONResponseError: If the API response is malformed
-        MissingSpeakerMappingError: If not all speakers are mapped
-        SpeakerNotFoundError: If a mapped speaker doesn't exist in transcript
-        
-    Example:
-        >>> transcript = "Speaker 0: Hello\\nSpeaker 1: Hi"
-        >>> result = classify_speakers(transcript)
-        >>> print(result)
-        Agent: Hello
-        Customer: Hi
-        
-        >>> result = classify_speakers(transcript, target_roles=["Sales", "Lead"])
-        >>> print(result)
-        Sales: Hello
-        Lead: Hi
+        Dict with 'transcript' (classified text) and 'log' (list of log entries)
     """
     if target_roles is None:
         target_roles = ["Agent", "Customer"]
     
     log = []
     
-    # Log configuration
     log.append({
         'step': 'configuration',
         'target_roles': target_roles,
-        'enable_safeguard': enable_safeguard,
-        'validate_only': validate_only
+        'enable_safeguard': enable_safeguard
     })
     
-    # Identify which labels need mapping
     non_target_labels = _identify_non_target_labels(transcript, target_roles)
     
     log.append({
@@ -268,39 +215,18 @@ def classify_speakers(
     
     result_transcript = transcript
     
-    # If there are non-target labels, map them
-    if non_target_labels and not validate_only:
-        # Step 1: Call the API to get speaker-to-role mapping
-        mapping = _call_gpt5_api(transcript, target_roles)
-        
-        log.append({
-            'step': 'mapping_decision',
-            'mapping': mapping
-        })
-        
-        # Step 2: Validate the mapping
+    if non_target_labels:
+        mapping = _call_gpt5_api(transcript, target_roles, non_target_labels, log)
         _validate_mapping(transcript, mapping, target_roles)
-        
-        # Step 3: Replace speaker labels with roles
-        result_transcript = _replace_speakers(transcript, mapping)
-        
-        log.append({
-            'step': 'label_replacement',
-            'completed': True
-        })
+        result_transcript = _replace_speakers(transcript, mapping, log)
     
-    # Safeguard validation (placeholder for now)
     if enable_safeguard:
         log.append({
             'step': 'safeguard',
             'status': 'not_yet_implemented'
         })
     
-    # Return format based on return_dict flag
-    if return_dict:
-        return {
-            'transcript': result_transcript,
-            'log': log
-        }
-    else:
-        return result_transcript
+    return {
+        'transcript': result_transcript,
+        'log': log
+    }
