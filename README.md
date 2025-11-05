@@ -4,14 +4,17 @@ A Python tool that processes diarized call center transcripts and identifies whi
 
 ## Features
 
-- **Automatic Role Detection**: Uses GPT-5 to intelligently identify agent and customer speakers
-- **Clean API**: Simple function interface for library usage
-- **CLI Tool**: Command-line interface for processing transcript files
-- **Robust Error Handling**: Comprehensive exception handling for API and validation errors
-- **AWS Lambda Ready**: Designed for deployment to AWS Lambda
-- **Test-Driven**: Built using BDD (Behavior-Driven Development) with pytest-bdd
+- **Speaker Role Classification**: Automatically identifies and labels speakers as Agent and Customer (or custom roles)
+- **Configurable Role Names**: Support for custom role pairs like "Sales/Lead", "Agent/Caller", etc.
+- **Mixed Label Handling**: Intelligently handles transcripts with mixed speaker labels (Speaker 0, Unknown, etc.)
+- **Safeguard Validation**: AI-powered validation layer that spot-checks and corrects misclassifications
+- **Structured Logging**: Detailed logs of classification decisions, mapping, and corrections
+- **OpenAI GPT-5 Integration**: Uses GPT-5 with tool calling for intelligent classification and validation
+- **Multiple Interfaces**: Use as a Python library, CLI tool, or REST API
+- **AWS Lambda Deployment**: Includes CDK stack for serverless deployment
+- **Comprehensive Testing**: BDD test coverage with pytest-bdd
 
-## Installation
+#### Installation
 
 ### From Source
 
@@ -177,10 +180,34 @@ This creates a public HTTP endpoint without needing API Gateway. See [DEPLOYMENT
 
 **Quick API Test:**
 ```bash
-curl -X POST https://your-function-url.lambda-url.region.on.aws/ \
+curl -X POST https://your-function-url.lambda-url.us-east-1.on.aws/ \
   -H "Content-Type: application/json" \
-  -d '{"transcript": "Speaker 0: Hello\nSpeaker 1: Hi"}'
+  -d '{
+    "transcript": "Speaker 0: Hello\nSpeaker 1: Hi there",
+    "target_roles": ["Agent", "Customer"],
+    "enable_safeguard": true
+  }'
 ```
+
+Response format:
+```json
+{
+  "transcript": "Agent: Hello\nCustomer: Hi there",
+  "log": [
+    {"step": "configuration", "target_roles": ["Agent", "Customer"], "enable_safeguard": true},
+    {"step": "label_analysis", "found_labels": ["Speaker 0", "Speaker 1"]},
+    {"step": "mapping_decision", "mapping": {"Speaker 0": "Agent", "Speaker 1": "Customer"}},
+    {"step": "label_replacement", "replacements": 2},
+    {"step": "safeguard_start", "target_roles": ["Agent", "Customer"]},
+    {"step": "safeguard_end", "corrections_made": [], "total_corrections": 0}
+  ]
+}
+```
+
+Request parameters:
+- `transcript` (required): The diarized transcript text
+- `target_roles` (optional): Array of two role names (default: ["Agent", "Customer"])
+- `enable_safeguard` (optional): Enable validation layer (default: false)
 
 ## License
 
