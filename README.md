@@ -135,10 +135,27 @@ speaker-role-classifier/
 │   ├── step_defs/
 │   │   └── test_classification_steps.py    # pytest-bdd step definitions
 │   └── conftest.py            # Test fixtures
+├── infrastructure/            # AWS CDK deployment
+│   ├── app.py                 # CDK app entry point
+│   ├── speaker_role_classifier_stack.py  # Lambda stack definition
+│   ├── cdk.json               # CDK configuration
+│   ├── requirements.txt       # CDK dependencies
+│   └── README.md              # Deployment guide
+├── lambda_handler/
+│   └── handler.py             # AWS Lambda entry point
+├── example_transcript.txt     # Sample transcript
+├── test_lambda_local.py       # Local Lambda testing
+├── test_deployed_lambda.sh    # Deployed Lambda testing
+├── send_to_lambda.sh          # Helper script to send files to Lambda
+├── requirements.txt           # Lambda runtime dependencies
 ├── .env                       # API key (gitignored)
 ├── .gitignore
 ├── pyproject.toml             # Project metadata and dependencies
-└── README.md
+├── LICENSE                    # MIT License
+├── README.md
+├── QUICKSTART.md              # Quick start guide
+├── DEPLOYMENT.md              # Detailed deployment guide
+└── TESTING.md                 # Testing guide
 ```
 
 ## AWS Lambda Deployment
