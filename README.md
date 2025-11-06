@@ -213,3 +213,44 @@ Request parameters:
 
 MIT
 
+
+## Safeguard Validation
+
+The classifier includes an optional safeguard validation layer that uses LLM tool calling to spot-check and correct misclassifications:
+
+```python
+from speaker_role_classifier import classify_speakers
+
+result = classify_speakers(
+    transcript,
+    target_roles=['Agent', 'Customer'],
+    enable_safeguard=True  # Enable safeguard validation
+)
+
+# Check corrections made
+corrections = [e for e in result['log'] if e.get('step') == 'utterance_corrected']
+print(f"Safeguard made {len(corrections)} corrections")
+```
+
+### How Safeguard Works
+
+1. After initial classification, the entire transcript is sent to GPT-5
+2. The LLM analyzes the conversation and identifies any misclassified utterances
+3. For each error, it calls a `correct_speaker_role` tool with:
+   - Current (incorrect) role
+   - First 5-10 words of the utterance
+   - Correct role
+   - Reasoning
+4. The system locates the specific utterance and corrects only that line
+5. If a correction fails (utterance not found), feedback is sent back to the LLM
+6. Process continues for up to 3 iterations
+7. All corrections are logged in the response
+
+### When to Use Safeguard
+
+- When you need high accuracy and can tolerate extra LLM calls
+- When transcripts may already have some (possibly incorrect) role labels
+- When diarization quality is uncertain
+- For production use cases where misclassifications have consequences
+
+The safeguard adds 1-3 additional LLM calls but significantly improves accuracy.

@@ -1,83 +1,215 @@
 # Testing Guide
 
+This project uses BDD (Behavior-Driven Development) testing with `pytest-bdd`.
+
+## Test Structure
+
+```
+tests/
+├── features/                    # Gherkin feature files
+│   ├── speaker_classification.feature      # Basic classification scenarios
+│   ├── advanced_classification.feature     # Custom roles, mixed labels
+│   └── safeguard_validation.feature        # Safeguard layer scenarios
+├── step_defs/                   # Step definitions (Python)
+│   ├── test_classification_steps.py
+│   ├── test_advanced_classification_steps.py
+│   └── test_safeguard_steps.py
+└── conftest.py                  # Shared fixtures and configuration
+```
+
 ## Running Tests
 
-### Run all tests
+### Run All Tests (with mocking)
 ```bash
 pytest tests/ -v
 ```
 
-### Run with coverage
+### Run Specific Test Suite
 ```bash
-pytest tests/ --cov=speaker_role_classifier --cov-report=html
+pytest tests/step_defs/test_safeguard_steps.py -v
 ```
 
-### Run specific test scenario
+### Run Tests Matching Pattern
 ```bash
-pytest tests/step_defs/test_classification_steps.py::test_successfully_classify_speakers_in_a_standard_transcript -v
+pytest tests/ -k "safeguard" -v
+```
+
+## Mocking vs Real API Tests
+
+By default, tests **mock OpenAI API calls** for speed and reliability. This is the recommended mode for:
+- Local development
+- CI/CD pipelines
+- Quick iteration
+
+### Running Integration Tests with Real API
+
+To run tests against the **real OpenAI API**:
+
+```bash
+export REAL_API_TESTS=1
+pytest tests/ -v
+```
+
+**Note:** Real API tests:
+- Require `OPENAI_API_KEY` in your `.env` file
+- Take significantly longer (10-15 minutes vs 1-2 minutes)
+- Cost money (GPT-5 API calls)
+- May have non-deterministic results
+- Are useful for validating actual LLM behavior
+
+### Recommended Testing Strategy
+
+1. **During Development**: Use mocked tests (default)
+   ```bash
+   pytest tests/ -v
+   ```
+
+2. **Before Commits**: Run mocked tests
+   ```bash
+   pytest tests/ -v
+   ```
+
+3. **Weekly/Before Releases**: Run real API tests
+   ```bash
+   export REAL_API_TESTS=1
+   pytest tests/ -v
+   ```
+
+4. **CI/CD**: Use mocked tests for fast feedback
+   ```yaml
+   # .github/workflows/test.yml
+   - name: Run Tests
+     run: pytest tests/ -v
+   ```
+
+5. **Nightly Builds** (optional): Run real API tests
+   ```yaml
+   # .github/workflows/integration-tests.yml
+   - name: Run Integration Tests
+     env:
+       REAL_API_TESTS: 1
+       OPENAI_API_KEY: ${{ secrets.OPENAI_API_KEY }}
+     run: pytest tests/ -v
+   ```
+
+## Test Coverage
+
+View test coverage:
+
+```bash
+pytest tests/ --cov=src/speaker_role_classifier --cov-report=html
+open htmlcov/index.html
 ```
 
 ## Test Scenarios
 
-The project includes 7 BDD test scenarios:
+### Basic Classification (7 scenarios)
+- Successfully classify speakers in a standard transcript
+- Handle invalid JSON response from API
+- Handle missing speaker mapping
+- Handle speaker not found in transcript
+- Successfully classify multiline transcript
+- Handle transcript with three speakers
+- Preserve transcript formatting
 
-1. **Successfully classify speakers in a standard transcript** - Verifies basic functionality
-2. **Handle invalid JSON response from API** - Tests error handling for malformed API responses
-3. **Handle missing speaker mapping** - Tests when API doesn't map all speakers
-4. **Handle speaker not found in transcript** - Tests when API maps non-existent speakers
-5. **Successfully classify multi-line transcript** - Tests multiple occurrences of speakers
-6. **Handle transcript with three speakers** - Tests edge case with >2 speakers
-7. **Preserve transcript formatting** - Tests that line breaks and spacing are maintained
+### Advanced Classification (10 scenarios)
+- Classify with custom role names (Sales/Lead, Agent/Caller)
+- Handle mixed speaker labels (Speaker 0, Unknown, etc.)
+- Handle partially labeled transcripts
+- Validate and correct already-labeled transcripts
+- Safeguard corrects misclassified utterances
+- Safeguard handles multiple corrections
+- Safeguard retries on correction failure
+- Log initial speaker role mapping decision
+- Lambda response includes structured logs
 
-## Test Coverage
+### Safeguard Validation (7 scenarios)
+- Safeguard validates correctly classified transcript
+- Safeguard corrects a single misclassified utterance
+- Safeguard corrects multiple misclassified utterances
+- Safeguard handles utterance not found gracefully
+- Safeguard respects max iterations limit
+- Safeguard works with custom role names
+- End-to-end classification with safeguard enabled
 
-Current coverage: ~68% for classifier.py (API call paths are mocked)
+**Total: 24 BDD scenarios**
 
-The tests use mocking to avoid making actual API calls during testing, which:
-- Makes tests fast and deterministic
-- Doesn't require API keys during testing
-- Allows testing error conditions
+## Writing New Tests
 
-## Manual Testing
+1. **Add a Gherkin scenario** in the appropriate `.feature` file:
+   ```gherkin
+   Scenario: My new scenario
+     Given some precondition
+     When some action happens
+     Then some outcome occurs
+   ```
 
-### Test the CLI
+2. **Implement step definitions** in the appropriate `test_*_steps.py` file:
+   ```python
+   @given('some precondition')
+   def setup_precondition(context):
+       context['data'] = "test"
+   
+   @when('some action happens')
+   def perform_action(context):
+       context['result'] = do_something(context['data'])
+   
+   @then('some outcome occurs')
+   def check_outcome(context):
+       assert context['result'] == "expected"
+   ```
+
+3. **Run the test** (it should fail - RED phase)
+   ```bash
+   pytest tests/ -k "my_new_scenario" -v
+   ```
+
+4. **Implement the feature** to make it pass (GREEN phase)
+
+5. **Refactor** if needed
+
+## Debugging Tests
+
+### Run with verbose output
 ```bash
-# Create a test file
-cat > test.txt << EOF
-Speaker 0: Hello, thanks for calling ABC Plumbing Services, how may I help you?
-Speaker 1: Hi, I have a big emergency! My faucet broke and it's flowing and it won't stop!
-EOF
-
-# Run the classifier (requires OPENAI_API_KEY in .env)
-speaker-role-classifier test.txt output.txt
-
-# Check the output
-cat output.txt
+pytest tests/ -vv
 ```
 
-### Test the library
-```python
-from speaker_role_classifier import classify_speakers
+### Run with print statements visible
+```bash
+pytest tests/ -s
+```
 
-transcript = """Speaker 0: Hello, thanks for calling ABC Plumbing Services, how may I help you?
-Speaker 1: Hi, I have a big emergency! My faucet broke and it's flowing and it won't stop!"""
+### Run specific test and stop on first failure
+```bash
+pytest tests/ -x -k "safeguard_corrects"
+```
 
-result = classify_speakers(transcript)
-print(result)
+### Drop into debugger on failure
+```bash
+pytest tests/ --pdb
 ```
 
 ## Continuous Integration
 
-To set up CI/CD, add these commands to your pipeline:
+The test suite is designed to run in CI/CD with:
+- Fast execution (< 2 minutes with mocking)
+- No external dependencies (mocked API calls)
+- Deterministic results
+- Clear failure messages
 
-```bash
-# Install dependencies
-pip install -e ".[dev]"
-
-# Run tests
-pytest tests/ -v --cov=speaker_role_classifier --cov-report=xml
-
-# Check coverage threshold (optional)
-pytest tests/ --cov=speaker_role_classifier --cov-fail-under=60
+Example GitHub Actions workflow:
+```yaml
+name: Tests
+on: [push, pull_request]
+jobs:
+  test:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v3
+      - uses: actions/setup-python@v4
+        with:
+          python-version: '3.11'
+      - run: pip install -e ".[dev]"
+      - run: pytest tests/ -v --cov=src/speaker_role_classifier
 ```
-
