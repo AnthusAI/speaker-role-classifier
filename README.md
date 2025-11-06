@@ -4,17 +4,16 @@ A Python tool that processes diarized call center transcripts and identifies whi
 
 ## Features
 
-- **Speaker Role Classification**: Automatically identifies and labels speakers as Agent and Customer (or custom roles)
-- **Configurable Role Names**: Support for custom role pairs like "Sales/Lead", "Agent/Caller", etc.
-- **Mixed Label Handling**: Intelligently handles transcripts with mixed speaker labels (Speaker 0, Unknown, etc.)
-- **Safeguard Validation**: AI-powered validation layer that spot-checks and corrects misclassifications
-- **Structured Logging**: Detailed logs of classification decisions, mapping, and corrections
-- **OpenAI GPT-5 Integration**: Uses GPT-5 with tool calling for intelligent classification and validation
-- **Multiple Interfaces**: Use as a Python library, CLI tool, or REST API
-- **AWS Lambda Deployment**: Includes CDK stack for serverless deployment
-- **Comprehensive Testing**: BDD test coverage with pytest-bdd
+- **Automatic Role Detection**: Uses GPT-5 to intelligently identify agent and customer speakers
+- **Clean API**: Simple function interface for library usage
+- **CLI Tool**: Command-line interface for processing transcript files
+- **Robust Error Handling**: Comprehensive exception handling for API and validation errors
+- **AWS Lambda Ready**: Designed for deployment to AWS Lambda
+- **Test-Driven**: Built using BDD (Behavior-Driven Development) with pytest-bdd
+- **CI/CD Pipeline**: Automated testing and deployment with CodePipeline and GitHub Actions
+- **Semantic Versioning**: Automated releases based on conventional commits
 
-#### Installation
+## Installation
 
 ### From Source
 
@@ -112,8 +111,10 @@ The tool raises specific exceptions for different error conditions:
 
 ### Running Tests
 
+By default, tests use mocked OpenAI API calls for speed and reliability:
+
 ```bash
-# Run all tests
+# Run all tests (with mocking)
 pytest
 
 # Run with coverage
@@ -123,28 +124,22 @@ pytest --cov=speaker_role_classifier --cov-report=html
 pytest tests/step_defs/test_classification_steps.py -v
 ```
 
+#### Integration Tests
 
-## Testing
+To run integration tests that make real API calls:
 
-The project has comprehensive BDD test coverage with 24 scenarios.
-
-### Run Tests (Mocked - Fast)
 ```bash
-pytest tests/ -v
+# Run ONLY integration tests (requires OPENAI_API_KEY)
+pytest -m integration
+
+# Run ALL tests including integration tests
+pytest -m ""
+
+# Skip integration tests (default in CI/CD)
+pytest -m "not integration"
 ```
 
-### Run Integration Tests (Real API - Slow)
-```bash
-export REAL_API_TESTS=1
-pytest tests/ -v
-```
-
-Or use the helper script:
-```bash
-./run_integration_tests.sh
-```
-
-See [TESTING.md](TESTING.md) for detailed testing documentation.
+**Note**: Integration tests require a valid `OPENAI_API_KEY` and will make real API calls (incurring costs).
 
 ### Project Structure
 
@@ -186,7 +181,29 @@ speaker-role-classifier/
 
 ## AWS Lambda Deployment
 
-Deploy as a serverless HTTP API using AWS CDK and Lambda Function URLs:
+Deploy as a serverless HTTP API using AWS CDK and Lambda Function URLs with optional CI/CD automation.
+
+### Deployment Options
+
+#### Option 1: Automated CI/CD (Recommended)
+
+Set up automated testing and deployment that triggers on every push to main:
+
+**AWS CodePipeline** (AWS-native):
+```bash
+cd infrastructure
+./setup-pipeline.sh
+```
+
+**GitHub Actions** (simpler):
+1. Configure GitHub Secrets (AWS credentials, OpenAI API key)
+2. Push to main - workflow runs automatically
+
+See **[CI-CD-COMPARISON.md](CI-CD-COMPARISON.md)** to choose the best option for your needs.
+
+#### Option 2: Manual Deployment
+
+For one-time or manual deployments:
 
 ```bash
 # Test locally first
@@ -196,84 +213,46 @@ python test_lambda_local.py
 cd infrastructure
 pip install -r requirements.txt
 export OPENAI_API_KEY=your_api_key_here
-cdk deploy
+cdk deploy SpeakerRoleClassifierStack
 ```
 
-This creates a public HTTP endpoint without needing API Gateway. See [DEPLOYMENT.md](DEPLOYMENT.md) for full details.
+### Testing the Deployed Function
 
-**Quick API Test:**
 ```bash
-curl -X POST https://your-function-url.lambda-url.us-east-1.on.aws/ \
+curl -X POST https://your-function-url.lambda-url.region.on.aws/ \
   -H "Content-Type: application/json" \
-  -d '{
-    "transcript": "Speaker 0: Hello\nSpeaker 1: Hi there",
-    "target_roles": ["Agent", "Customer"],
-    "enable_safeguard": true
-  }'
+  -d '{"transcript": "Speaker 0: Hello\nSpeaker 1: Hi"}'
 ```
 
-Response format:
-```json
-{
-  "transcript": "Agent: Hello\nCustomer: Hi there",
-  "log": [
-    {"step": "configuration", "target_roles": ["Agent", "Customer"], "enable_safeguard": true},
-    {"step": "label_analysis", "found_labels": ["Speaker 0", "Speaker 1"]},
-    {"step": "mapping_decision", "mapping": {"Speaker 0": "Agent", "Speaker 1": "Customer"}},
-    {"step": "label_replacement", "replacements": 2},
-    {"step": "safeguard_start", "target_roles": ["Agent", "Customer"]},
-    {"step": "safeguard_end", "corrections_made": [], "total_corrections": 0}
-  ]
-}
+### Documentation
+
+- **[infrastructure/README.md](infrastructure/README.md)** - Lambda deployment guide
+- **[infrastructure/PIPELINE.md](infrastructure/PIPELINE.md)** - CI/CD pipeline setup
+- **[CI-CD-COMPARISON.md](CI-CD-COMPARISON.md)** - Compare CI/CD options
+- **[DEPLOYMENT.md](DEPLOYMENT.md)** - Detailed deployment guide
+
+## Releases and Versioning
+
+This project uses [Semantic Release](https://semantic-release.gitbook.io/) for automated versioning and releases.
+
+### Viewing Releases
+
+- **[GitHub Releases](https://github.com/AnthusAI/speaker-role-classifier/releases)** - View all releases with changelogs
+- **[CHANGELOG.md](CHANGELOG.md)** - Detailed changelog
+- **[SEMANTIC-RELEASE.md](SEMANTIC-RELEASE.md)** - Release documentation
+
+### Contributing
+
+When contributing, use [Conventional Commits](https://www.conventionalcommits.org/):
+
+```bash
+feat: add new feature      # Minor version bump (0.1.0 → 0.2.0)
+fix: fix bug              # Patch version bump (0.1.0 → 0.1.1)
+feat!: breaking change    # Major version bump (0.1.0 → 1.0.0)
 ```
 
-Request parameters:
-- `transcript` (required): The diarized transcript text
-- `target_roles` (optional): Array of two role names (default: ["Agent", "Customer"])
-- `enable_safeguard` (optional): Enable validation layer (default: false)
+See **[.github/COMMIT_CONVENTION.md](.github/COMMIT_CONVENTION.md)** for detailed guidelines.
 
 ## License
 
 MIT
-
-
-## Safeguard Validation
-
-The classifier includes an optional safeguard validation layer that uses LLM tool calling to spot-check and correct misclassifications:
-
-```python
-from speaker_role_classifier import classify_speakers
-
-result = classify_speakers(
-    transcript,
-    target_roles=['Agent', 'Customer'],
-    enable_safeguard=True  # Enable safeguard validation
-)
-
-# Check corrections made
-corrections = [e for e in result['log'] if e.get('step') == 'utterance_corrected']
-print(f"Safeguard made {len(corrections)} corrections")
-```
-
-### How Safeguard Works
-
-1. After initial classification, the entire transcript is sent to GPT-5
-2. The LLM analyzes the conversation and identifies any misclassified utterances
-3. For each error, it calls a `correct_speaker_role` tool with:
-   - Current (incorrect) role
-   - First 5-10 words of the utterance
-   - Correct role
-   - Reasoning
-4. The system locates the specific utterance and corrects only that line
-5. If a correction fails (utterance not found), feedback is sent back to the LLM
-6. Process continues for up to 3 iterations
-7. All corrections are logged in the response
-
-### When to Use Safeguard
-
-- When you need high accuracy and can tolerate extra LLM calls
-- When transcripts may already have some (possibly incorrect) role labels
-- When diarization quality is uncertain
-- For production use cases where misclassifications have consequences
-
-The safeguard adds 1-3 additional LLM calls but significantly improves accuracy.

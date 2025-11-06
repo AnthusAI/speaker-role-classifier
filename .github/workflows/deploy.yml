@@ -30,9 +30,9 @@ jobs:
       
       - name: Run tests with pytest
         env:
-          OPENAI_API_KEY: ${{ secrets.OPENAI_API_KEY }}
+          OPENAI_API_KEY: dummy-key-for-testing
         run: |
-          pytest tests/ -v --cov=speaker_role_classifier --cov-report=term --cov-report=xml
+          pytest tests/ -v --cov=speaker_role_classifier --cov-report=term --cov-report=xml -m "not integration"
       
       - name: Upload coverage reports
         uses: codecov/codecov-action@v4
