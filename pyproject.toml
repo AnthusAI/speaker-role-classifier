@@ -4,7 +4,7 @@ build-backend = "setuptools.build_meta"
 
 [project]
 name = "speaker-role-classifier"
-version = "1.0.0"
+version = "1.0.1"
 description = "A tool to classify speakers in diarized call center transcripts as Agent or Customer"
 authors = [{name = "Ryan Porter"}]
 readme = "README.md"

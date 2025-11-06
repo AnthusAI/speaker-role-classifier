@@ -1,3 +1,10 @@
+## [1.0.1](https://github.com/AnthusAI/speaker-role-classifier/compare/v1.0.0...v1.0.1) (2025-11-06)
+
+
+### Bug Fixes
+
+* improve OpenAI API mocking to support all test scenarios ([87761e8](https://github.com/AnthusAI/speaker-role-classifier/commit/87761e8d62065db53dabdf21c7d1aecf34a05aa1))
+
 ## 1.0.0 (2025-11-06)
 
 
