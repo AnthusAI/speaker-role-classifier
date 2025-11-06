@@ -123,6 +123,29 @@ pytest --cov=speaker_role_classifier --cov-report=html
 pytest tests/step_defs/test_classification_steps.py -v
 ```
 
+
+## Testing
+
+The project has comprehensive BDD test coverage with 24 scenarios.
+
+### Run Tests (Mocked - Fast)
+```bash
+pytest tests/ -v
+```
+
+### Run Integration Tests (Real API - Slow)
+```bash
+export REAL_API_TESTS=1
+pytest tests/ -v
+```
+
+Or use the helper script:
+```bash
+./run_integration_tests.sh
+```
+
+See [TESTING.md](TESTING.md) for detailed testing documentation.
+
 ### Project Structure
 
 ```
