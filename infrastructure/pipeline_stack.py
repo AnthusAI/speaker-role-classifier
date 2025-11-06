@@ -134,6 +134,8 @@ class PipelineStack(Stack):
                     "iam:*",
                     "s3:*",
                     "ecr:*",
+                    "ssm:GetParameter",  # Required for CDK bootstrap version check
+                    "sts:AssumeRole",     # Required to assume CDK deployment roles
                 ],
                 resources=["*"],
             )
