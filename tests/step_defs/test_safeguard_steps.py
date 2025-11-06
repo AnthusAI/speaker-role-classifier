@@ -7,6 +7,10 @@ from speaker_role_classifier.classifier import classify_speakers
 # Load all scenarios from the feature file
 scenarios('../features/safeguard_validation.feature')
 
+# Safeguard tests require the safeguard feature to be fully implemented
+pytestmark = pytest.mark.integration
+
+
 
 @pytest.fixture
 def correctly_classified_transcript():

@@ -2,6 +2,7 @@
 
 import pytest
 import os
+import json
 from unittest.mock import Mock
 
 
@@ -19,16 +20,79 @@ def mock_openai_by_default(monkeypatch, request):
     if 'integration' in request.keywords:
         return
     
+    # Create a smart mock that responds based on the prompt
+    def mock_create(**kwargs):
+        """Smart mock that extracts target roles from the prompt."""
+        messages = kwargs.get('messages', [])
+        
+        # Default roles
+        roles = ["Agent", "Customer"]
+        
+        # Try to extract target_roles from the system message
+        # System message format: "...these roles: Sales and Lead" or "...these roles: Agent and Customer"
+        for msg in messages:
+            if msg.get('role') == 'system':
+                content = msg.get('content', '')
+                # Look for "these roles: X and Y" pattern
+                import re
+                role_match = re.search(r'these roles:\s*([^.]+)', content)
+                if role_match:
+                    role_str = role_match.group(1).strip()
+                    # Split by "and" to get individual roles
+                    found_roles = [r.strip() for r in role_str.split(' and ')]
+                    if found_roles and all(found_roles):
+                        roles = found_roles
+        
+        # Try to extract user message for speaker detection
+        user_msg = None
+        for msg in messages:
+            if msg.get('role') == 'user':
+                user_msg = msg.get('content', '')
+                break
+        
+        # Extract speaker labels from transcript
+        speakers = []
+        if user_msg:
+            import re
+            # Match "Speaker N" or role names (Agent, Customer, etc.) but not full sentences
+            speaker_pattern = r'^(Speaker \d+|Agent|Customer|Sales|Lead|Caller|Unknown):'
+            for line in user_msg.split('\n'):
+                line = line.strip()
+                if not line or line.startswith('Example') or line.startswith('Here is'):
+                    continue
+                match = re.match(speaker_pattern, line)
+                if match:
+                    speaker = match.group(1).strip()
+                    if speaker not in speakers:
+                        speakers.append(speaker)
+        
+        # Default to Speaker 0, Speaker 1 if not found
+        if not speakers:
+            speakers = ["Speaker 0", "Speaker 1"]
+        
+        # Create mapping: alternate speakers to roles
+        mapping = {}
+        for i, speaker in enumerate(speakers):
+            mapping[speaker] = roles[i % len(roles)]
+        
+        mock_completion = Mock()
+        mock_completion.choices = [Mock(message=Mock(content=json.dumps(mapping)))]
+        return mock_completion
+    
     # Mock the OpenAI client
     mock_client = Mock()
-    mock_completion = Mock()
-    mock_completion.choices = [Mock(message=Mock(content='{"Speaker 0": "Agent", "Speaker 1": "Customer"}'))]
-    mock_client.chat.completions.create.return_value = mock_completion
+    mock_client.chat.completions.create = mock_create
     
     # Patch the OpenAI client creation
     from unittest.mock import patch
     with patch('speaker_role_classifier.classifier.OpenAI', return_value=mock_client):
         yield mock_client
+
+
+@pytest.fixture
+def context():
+    """Shared context dictionary for BDD tests."""
+    return {}
 
 
 @pytest.fixture
