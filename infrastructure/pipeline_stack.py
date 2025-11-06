@@ -117,7 +117,6 @@ class PipelineStack(Stack):
                     "build": {
                         "commands": [
                             "echo Deploying with CDK...",
-                            "cd infrastructure",
                             "cdk deploy SpeakerRoleClassifierStack --require-approval never",
                         ],
                     },
