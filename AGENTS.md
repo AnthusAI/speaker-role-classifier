@@ -151,9 +151,10 @@ lambda_handler/        # AWS Lambda entry point
 
 - `feat:` - New feature (minor version bump: 0.1.0 → 0.2.0)
 - `fix:` - Bug fix (patch version bump: 0.1.0 → 0.1.1)
-- `docs:` - Documentation only changes (no version bump)
+- `security:` - Security fix (patch version bump: 0.1.0 → 0.1.1)
+- `docs:` - Documentation only changes (patch version bump)
 - `test:` - Adding or updating tests (no version bump)
-- `refactor:` - Code refactoring (no version bump)
+- `refactor:` - Code refactoring (patch version bump)
 - `chore:` - Maintenance tasks (no version bump)
 - `feat!:` or `fix!:` - Breaking change (major version bump: 0.1.0 → 1.0.0)
 
@@ -166,12 +167,15 @@ git commit -m "feat: add support for custom role names"
 # Bug fix (patch bump)
 git commit -m "fix: handle empty transcript gracefully"
 
+# Security fix (patch bump)
+git commit -m "security: upgrade openai package to fix CVE-2024-1234"
+
 # Breaking change (major bump)
 git commit -m "feat!: change classify_speakers return format to dict
 
 BREAKING CHANGE: classify_speakers now returns a dict with 'transcript' and 'log' keys instead of just the transcript string"
 
-# Documentation (no bump)
+# Documentation (patch bump)
 git commit -m "docs: update README with new examples"
 
 # Tests (no bump)
@@ -190,20 +194,69 @@ See `.github/COMMIT_CONVENTION.md` for detailed guidelines.
 
 ## CI/CD and Deployment
 
+### Unified Pipeline Architecture
+
+**CRITICAL**: This project uses a unified CI/CD pipeline where all validation happens in GitHub Actions BEFORE version advancement and AWS deployment.
+
+```
+Push to main
+    ↓
+Security Scanning (parallel)
+    ├─ CodeQL (GitHub semantic analysis)
+    ├─ Bandit (Python security linter)
+    ├─ Safety (dependency vulnerabilities)
+    └─ pip-audit (PyPA vulnerability scanner)
+    ↓
+Tests (parallel with security)
+    └─ pytest with mocked tests + coverage
+    ↓
+Unified Pipeline (sequential)
+    ├─ Wait for security + tests to pass
+    ├─ Run semantic-release (version bump, tag, changelog)
+    ├─ Trigger AWS CodePipeline deployment
+    ├─ Wait for AWS deployment to complete
+    └─ Report success/failure
+```
+
+**Key Principle**: Version is only advanced after ALL validation passes. AWS CodePipeline is deployment-only (no tests or security scans that could cause it to fail).
+
 ### GitHub Actions Workflows
 
-1. **`.github/workflows/deploy.yml`** - Runs on push/PR
+1. **`.github/workflows/test.yml`** - Runs on push/PR
    - Installs dependencies
    - Runs mocked tests (`pytest -m "not integration"`)
    - Uploads coverage to Codecov
-   - **Does NOT deploy to AWS** (manual deployment only)
+   - Fast feedback (~30 seconds)
 
-2. **`.github/workflows/release.yml`** - Runs on push to main
-   - Analyzes commits using Conventional Commits
-   - Determines version bump
-   - Creates GitHub release
-   - Updates CHANGELOG.md
-   - Publishes release notes
+2. **`.github/workflows/security.yml`** - Runs on push/PR
+   - Bandit: Python security linter (SQL injection, hardcoded passwords, etc.)
+   - Safety: Dependency vulnerability scanner (CVSSv3 >= 7.0)
+   - pip-audit: PyPA official vulnerability scanner
+   - Uploads SARIF reports to GitHub Security tab
+   - Blocks deployment on HIGH/CRITICAL findings
+
+3. **`.github/workflows/codeql.yml`** - Runs on push/PR/schedule
+   - GitHub's semantic code analysis
+   - Security-extended query suite
+   - AI-powered Copilot Autofix for vulnerabilities
+   - Runs weekly on schedule
+
+4. **`.github/workflows/unified-pipeline.yml`** - Runs on push to main only
+   - Waits for security and test workflows to pass
+   - Runs semantic-release (version bump, tag, changelog, GitHub release)
+   - Triggers AWS CodePipeline via AWS CLI
+   - Waits for AWS deployment to complete (15 min timeout)
+   - Reports final status
+
+### AWS CodePipeline (Deployment-Only)
+
+The AWS CodePipeline is **simplified to deployment-only** with no tests or security scans:
+
+- **Source stage**: Pull from GitHub (webhook DISABLED - manual trigger only)
+- **Build stage**: Package Lambda dependencies (no tests, cannot fail)
+- **Deploy stage**: CDK deploy (only infrastructure issues can fail)
+
+**Important**: CodePipeline is triggered by GitHub Actions AFTER version is tagged. This ensures version advancement only happens after all validation passes.
 
 ### Manual AWS Deployment
 
@@ -211,21 +264,29 @@ See `.github/COMMIT_CONVENTION.md` for detailed guidelines.
 # Test Lambda locally first
 python test_lambda_local.py
 
-# Deploy to AWS
+# Deploy to AWS (if needed outside of CI/CD)
 cd infrastructure
 pip install -r requirements.txt
 export OPENAI_API_KEY=your_api_key_here
 cdk deploy SpeakerRoleClassifierStack
+
+# Or manually trigger CodePipeline
+aws codepipeline start-pipeline-execution --name SpeakerRoleClassifierPipeline
 ```
 
-### AWS CodePipeline (Optional)
+### AWS Setup for GitHub Actions
 
-For automated AWS deployment on every commit:
+To enable GitHub Actions to trigger AWS CodePipeline, configure:
 
-```bash
-cd infrastructure
-./setup-pipeline.sh
-```
+1. **IAM User**: `github-actions-deployer`
+2. **IAM Policy**: Minimal permissions for CodePipeline trigger
+3. **GitHub Secrets**:
+   - `AWS_ACCESS_KEY_ID`
+   - `AWS_SECRET_ACCESS_KEY`
+   - `AWS_REGION`
+   - `AWS_CODEPIPELINE_NAME` (value: `SpeakerRoleClassifierPipeline`)
+
+See `infrastructure/README.md` for detailed setup instructions.
 
 ## Environment Variables
 
@@ -267,8 +328,81 @@ cd infrastructure
 
 ## Security Considerations
 
+### Automated Security Scanning
+
+This project uses comprehensive automated security scanning:
+
+1. **Dependabot** (`.github/dependabot.yml`)
+   - Automated dependency updates for Python and GitHub Actions
+   - Daily checks for security vulnerabilities
+   - Auto-creates PRs for security updates
+
+2. **CodeQL** (`.github/workflows/codeql.yml`)
+   - GitHub's semantic code analysis
+   - Security-extended query suite
+   - AI-powered Copilot Autofix for vulnerabilities
+   - Runs on every push/PR and weekly schedule
+
+3. **Bandit** (`.bandit.yml`)
+   - Python security linter
+   - Checks for: SQL injection, hardcoded passwords, shell injection, insecure crypto
+   - Severity threshold: MEDIUM and above
+   - Excludes test directories
+
+4. **Safety** (`.safety-policy.yml`)
+   - Dependency vulnerability scanner
+   - Fails on CVSSv3 >= 7.0 (HIGH/CRITICAL)
+   - Scans both direct and transitive dependencies
+
+5. **pip-audit**
+   - PyPA official vulnerability scanner
+   - Uses OSV (Open Source Vulnerabilities) database
+   - Fails on any known vulnerability
+
+### Running Security Scans Locally
+
+```bash
+# Install security tools
+pip install -e ".[dev]"
+
+# Run Bandit
+bandit -r src/
+
+# Run Safety
+safety check --policy-file .safety-policy.yml
+
+# Run pip-audit
+pip-audit
+
+# Run all security scans (same as CI)
+bandit -r src/ && safety check && pip-audit
+```
+
+### Security Findings in CI/CD
+
+- Security scans run on every push and PR
+- HIGH/CRITICAL findings block deployment
+- Results uploaded to GitHub Security tab (SARIF format)
+- Copilot can suggest automatic fixes for vulnerabilities
+
+### Handling Security Findings
+
+1. **Review the finding** in GitHub Security tab or workflow logs
+2. **Assess severity** (LOW/MEDIUM/HIGH/CRITICAL)
+3. **Fix the issue**:
+   - Update dependency: `pip install --upgrade <package>`
+   - Refactor code to remove vulnerability
+   - Use Copilot Autofix suggestions
+4. **Ignore false positives** (with justification):
+   - Add to `.safety-policy.yml` for dependency issues
+   - Add to `.bandit.yml` for code issues
+5. **Commit with `security:` prefix** for release notes
+
+### API Keys and Secrets
+
 - Never commit `.env` file or API keys
 - API keys stored in AWS Secrets Manager for Lambda
+- GitHub Secrets used for CI/CD (AWS credentials, tokens)
 - Lambda has minimal IAM permissions
 - Integration tests incur API costs - use sparingly
 
@@ -306,16 +440,78 @@ cd infrastructure
 - OpenAI API key injected from Secrets Manager
 - Cold start can take 2-3 seconds
 
+## Troubleshooting
+
+### Security Scan Failures
+
+**Problem**: Security workflow fails with HIGH/CRITICAL findings
+
+**Solution**:
+1. Check GitHub Actions logs for specific findings
+2. Review GitHub Security tab for detailed vulnerability information
+3. Update vulnerable dependencies: `pip install --upgrade <package>`
+4. For code issues, refactor using Copilot Autofix suggestions
+5. For false positives, add to `.safety-policy.yml` or `.bandit.yml` with justification
+
+### AWS Deployment Fails After Version Bump
+
+**Problem**: Version is tagged (e.g., v1.0.3) but AWS deployment failed
+
+**Impact**: Version 1.0.3 exists in GitHub but NOT deployed to AWS Lambda
+
+**Solution**:
+1. Check AWS CodePipeline console for error details
+2. Fix infrastructure issue (IAM permissions, CDK config, etc.)
+3. Manually trigger deployment:
+   ```bash
+   aws codepipeline start-pipeline-execution --name SpeakerRoleClassifierPipeline
+   ```
+4. Or push a new commit to trigger full pipeline again
+
+**Why this is acceptable**: Infrastructure failures are rare (not code quality issues). Version tag accurately reflects code state.
+
+### Unified Pipeline Timeout
+
+**Problem**: Unified pipeline times out waiting for AWS deployment
+
+**Solution**:
+1. Check AWS CodePipeline console - deployment may still be running
+2. If deployment succeeded, the timeout is just a monitoring issue
+3. If deployment failed, see "AWS Deployment Fails" above
+4. Increase timeout in `.github/workflows/unified-pipeline.yml` if needed (default: 15 minutes)
+
+### Tests Pass Locally But Fail in CI
+
+**Problem**: `pytest -m "not integration"` passes locally but fails in GitHub Actions
+
+**Solution**:
+1. Ensure all dependencies are in `pyproject.toml`
+2. Check Python version matches (3.11)
+3. Review GitHub Actions logs for specific error
+4. Try running in clean environment: `python -m venv clean_env && source clean_env/bin/activate && pip install -e .[dev] && pytest -m "not integration"`
+
+### Manual Trigger of AWS CodePipeline
+
+**To manually trigger AWS deployment**:
+```bash
+# Trigger pipeline
+aws codepipeline start-pipeline-execution --name SpeakerRoleClassifierPipeline
+
+# Check status
+aws codepipeline get-pipeline-state --name SpeakerRoleClassifierPipeline
+```
+
 ## Before Committing
 
 **Checklist:**
 
 1. ✅ Tests written first (BDD feature file)
 2. ✅ All mocked tests pass: `pytest -m "not integration"`
-3. ✅ If touching safeguard, integration tests pass: `pytest -m integration`
-4. ✅ Commit message follows Conventional Commits format
-5. ✅ No API keys or secrets in code
-6. ✅ Documentation updated if needed
+3. ✅ Security scans pass locally: `bandit -r src/ && safety check && pip-audit`
+4. ✅ If touching safeguard, integration tests pass: `pytest -m integration`
+5. ✅ Commit message follows Conventional Commits format (include `security:` for security fixes)
+6. ✅ No API keys or secrets in code
+7. ✅ Documentation updated if needed
 
 ## Resources
 

@@ -1,0 +1,225 @@
+name: Unified CI/CD Pipeline
+
+on:
+  push:
+    branches: [ "main" ]
+
+permissions:
+  contents: write
+  issues: write
+  pull-requests: write
+  security-events: write
+
+jobs:
+  # Wait for security and test workflows to complete
+  wait-for-validation:
+    name: Wait for Security and Tests
+    runs-on: ubuntu-latest
+    
+    steps:
+      - name: Wait for security workflow
+        uses: lewagon/wait-on-check-action@v1.3.4
+        with:
+          ref: ${{ github.sha }}
+          check-name: 'Security Summary'
+          repo-token: ${{ secrets.GITHUB_TOKEN }}
+          wait-interval: 10
+      
+      - name: Wait for test workflow
+        uses: lewagon/wait-on-check-action@v1.3.4
+        with:
+          ref: ${{ github.sha }}
+          check-name: 'Run Tests'
+          repo-token: ${{ secrets.GITHUB_TOKEN }}
+          wait-interval: 10
+      
+      - name: Wait for CodeQL workflow
+        uses: lewagon/wait-on-check-action@v1.3.4
+        with:
+          ref: ${{ github.sha }}
+          check-name: 'Analyze Python Code'
+          repo-token: ${{ secrets.GITHUB_TOKEN }}
+          wait-interval: 10
+      
+      - name: Validation complete
+        run: |
+          echo "✅ All validation workflows passed"
+          echo "- Security scanning (Bandit, Safety, pip-audit)"
+          echo "- CodeQL analysis"
+          echo "- Unit tests with coverage"
+          echo "Ready to proceed with version bump and deployment"
+
+  # Run semantic release to bump version and create release
+  release:
+    name: Semantic Release
+    runs-on: ubuntu-latest
+    needs: wait-for-validation
+    outputs:
+      new-release-published: ${{ steps.semantic.outputs.new-release-published }}
+      new-release-version: ${{ steps.semantic.outputs.new-release-version }}
+    
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+          persist-credentials: false
+          token: ${{ secrets.GITHUB_TOKEN }}
+      
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+      
+      - name: Install semantic-release
+        run: |
+          npm install -g \
+            semantic-release@23 \
+            @semantic-release/changelog@6 \
+            @semantic-release/git@10 \
+            @semantic-release/exec@6 \
+            conventional-changelog-conventionalcommits@7
+      
+      - name: Run semantic-release
+        id: semantic
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          npx semantic-release
+          # Capture outputs for downstream jobs
+          echo "new-release-published=$(npx semantic-release --dry-run | grep -q 'Published release' && echo 'true' || echo 'false')" >> $GITHUB_OUTPUT
+      
+      - name: Release summary
+        run: |
+          if [ "${{ steps.semantic.outputs.new-release-published }}" == "true" ]; then
+            echo "✅ New release published: v${{ steps.semantic.outputs.new-release-version }}"
+            echo "- Version bumped in pyproject.toml"
+            echo "- CHANGELOG.md updated"
+            echo "- Git tag created"
+            echo "- GitHub release created"
+          else
+            echo "ℹ️ No release published (no relevant commits since last release)"
+          fi
+
+  # Trigger AWS CodePipeline deployment
+  deploy-to-aws:
+    name: Deploy to AWS
+    runs-on: ubuntu-latest
+    needs: release
+    if: needs.release.outputs.new-release-published == 'true'
+    
+    steps:
+      - name: Configure AWS credentials
+        uses: aws-actions/configure-aws-credentials@v4
+        with:
+          aws-access-key-id: ${{ secrets.AWS_ACCESS_KEY_ID }}
+          aws-secret-access-key: ${{ secrets.AWS_SECRET_ACCESS_KEY }}
+          aws-region: ${{ secrets.AWS_REGION }}
+      
+      - name: Trigger CodePipeline
+        id: trigger
+        run: |
+          echo "🚀 Triggering AWS CodePipeline deployment..."
+          EXECUTION_ID=$(aws codepipeline start-pipeline-execution \
+            --name ${{ secrets.AWS_CODEPIPELINE_NAME }} \
+            --query 'pipelineExecutionId' \
+            --output text)
+          echo "execution-id=$EXECUTION_ID" >> $GITHUB_OUTPUT
+          echo "Pipeline execution ID: $EXECUTION_ID"
+      
+      - name: Wait for CodePipeline completion
+        id: wait
+        run: |
+          EXECUTION_ID="${{ steps.trigger.outputs.execution-id }}"
+          PIPELINE_NAME="${{ secrets.AWS_CODEPIPELINE_NAME }}"
+          MAX_WAIT_SECONDS=900  # 15 minutes
+          WAIT_INTERVAL=30
+          ELAPSED=0
+          
+          echo "⏳ Waiting for CodePipeline to complete..."
+          echo "Pipeline: $PIPELINE_NAME"
+          echo "Execution ID: $EXECUTION_ID"
+          
+          while [ $ELAPSED -lt $MAX_WAIT_SECONDS ]; do
+            STATUS=$(aws codepipeline get-pipeline-execution \
+              --pipeline-name "$PIPELINE_NAME" \
+              --pipeline-execution-id "$EXECUTION_ID" \
+              --query 'pipelineExecution.status' \
+              --output text)
+            
+            echo "Status: $STATUS (elapsed: ${ELAPSED}s)"
+            
+            if [ "$STATUS" == "Succeeded" ]; then
+              echo "✅ CodePipeline deployment succeeded!"
+              echo "status=success" >> $GITHUB_OUTPUT
+              exit 0
+            elif [ "$STATUS" == "Failed" ] || [ "$STATUS" == "Stopped" ]; then
+              echo "❌ CodePipeline deployment failed with status: $STATUS"
+              echo "status=failed" >> $GITHUB_OUTPUT
+              exit 1
+            fi
+            
+            sleep $WAIT_INTERVAL
+            ELAPSED=$((ELAPSED + WAIT_INTERVAL))
+          done
+          
+          echo "⏱️ Timeout waiting for CodePipeline (${MAX_WAIT_SECONDS}s)"
+          echo "status=timeout" >> $GITHUB_OUTPUT
+          exit 1
+      
+      - name: Deployment summary
+        if: always()
+        run: |
+          STATUS="${{ steps.wait.outputs.status }}"
+          VERSION="${{ needs.release.outputs.new-release-version }}"
+          
+          if [ "$STATUS" == "success" ]; then
+            echo "✅ Deployment successful!"
+            echo "Version v$VERSION is now deployed to AWS Lambda"
+          elif [ "$STATUS" == "failed" ]; then
+            echo "❌ Deployment failed!"
+            echo "Version v$VERSION is tagged in GitHub but NOT deployed to AWS"
+            echo "Manual intervention required - check AWS CodePipeline console"
+          elif [ "$STATUS" == "timeout" ]; then
+            echo "⏱️ Deployment timeout!"
+            echo "CodePipeline may still be running - check AWS console"
+          fi
+
+  # Final summary
+  pipeline-summary:
+    name: Pipeline Summary
+    runs-on: ubuntu-latest
+    needs: [wait-for-validation, release, deploy-to-aws]
+    if: always()
+    
+    steps:
+      - name: Summary
+        run: |
+          echo "# Unified CI/CD Pipeline Summary" >> $GITHUB_STEP_SUMMARY
+          echo "" >> $GITHUB_STEP_SUMMARY
+          
+          echo "## Validation" >> $GITHUB_STEP_SUMMARY
+          if [ "${{ needs.wait-for-validation.result }}" == "success" ]; then
+            echo "✅ Security scanning and tests passed" >> $GITHUB_STEP_SUMMARY
+          else
+            echo "❌ Validation failed" >> $GITHUB_STEP_SUMMARY
+          fi
+          echo "" >> $GITHUB_STEP_SUMMARY
+          
+          echo "## Release" >> $GITHUB_STEP_SUMMARY
+          if [ "${{ needs.release.outputs.new-release-published }}" == "true" ]; then
+            echo "✅ Version v${{ needs.release.outputs.new-release-version }} released" >> $GITHUB_STEP_SUMMARY
+          else
+            echo "ℹ️ No new release (no relevant commits)" >> $GITHUB_STEP_SUMMARY
+          fi
+          echo "" >> $GITHUB_STEP_SUMMARY
+          
+          echo "## Deployment" >> $GITHUB_STEP_SUMMARY
+          if [ "${{ needs.deploy-to-aws.result }}" == "success" ]; then
+            echo "✅ Deployed to AWS Lambda" >> $GITHUB_STEP_SUMMARY
+          elif [ "${{ needs.deploy-to-aws.result }}" == "skipped" ]; then
+            echo "⏭️ Skipped (no new release)" >> $GITHUB_STEP_SUMMARY
+          else
+            echo "❌ Deployment failed - manual intervention required" >> $GITHUB_STEP_SUMMARY
+          fi
+

@@ -29,12 +29,12 @@ class PipelineStack(Stack):
         source_output = codepipeline.Artifact("SourceOutput")
         build_output = codepipeline.Artifact("BuildOutput")
 
-        # Create CodeBuild project for testing and building
+        # Create CodeBuild project for building (no tests - validation done in GitHub Actions)
         build_project = codebuild.PipelineProject(
             self,
             "BuildProject",
             project_name="SpeakerRoleClassifierBuild",
-            description="Build and test Speaker Role Classifier",
+            description="Build Speaker Role Classifier Lambda package (no tests)",
             environment=codebuild.BuildEnvironment(
                 build_image=codebuild.LinuxBuildImage.STANDARD_7_0,
                 compute_type=codebuild.ComputeType.SMALL,
@@ -54,22 +54,17 @@ class PipelineStack(Stack):
                             "python": "3.11",
                         },
                         "commands": [
-                            "echo Installing dependencies...",
+                            "echo Installing production dependencies only...",
                             "pip install --upgrade pip",
-                            "pip install -e .[dev]",
-                        ],
-                    },
-                    "pre_build": {
-                        "commands": [
-                            "echo Running tests...",
-                            "pytest tests/ -v",
+                            "pip install -e .",  # No [dev] - production dependencies only
                         ],
                     },
                     "build": {
                         "commands": [
                             "echo Build started on `date`",
                             "echo Building Lambda deployment package...",
-                            # The actual Lambda deployment is handled by CDK
+                            "echo All validation (tests, security) completed in GitHub Actions",
+                            "echo This stage only packages for deployment",
                             "echo Build completed successfully",
                         ],
                     },
@@ -150,6 +145,8 @@ class PipelineStack(Stack):
         )
 
         # Add source stage
+        # NOTE: Webhook trigger is DISABLED - pipeline only runs when triggered by GitHub Actions
+        # This ensures version is bumped and validated BEFORE deployment
         source_action = codepipeline_actions.GitHubSourceAction(
             action_name="GitHub_Source",
             owner="AnthusAI",
@@ -157,7 +154,7 @@ class PipelineStack(Stack):
             branch="main",
             oauth_token=github_token,
             output=source_output,
-            trigger=codepipeline_actions.GitHubTrigger.WEBHOOK,
+            trigger=codepipeline_actions.GitHubTrigger.NONE,  # Disabled - manual trigger only
         )
 
         pipeline.add_stage(
@@ -165,9 +162,9 @@ class PipelineStack(Stack):
             actions=[source_action],
         )
 
-        # Add build/test stage
+        # Add build stage (no tests - validation done in GitHub Actions)
         build_action = codepipeline_actions.CodeBuildAction(
-            action_name="Build_and_Test",
+            action_name="Build_Package",
             project=build_project,
             input=source_output,
             outputs=[build_output],

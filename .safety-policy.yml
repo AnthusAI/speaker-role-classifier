@@ -1,0 +1,44 @@
+# Safety vulnerability scanning policy
+# https://docs.pyup.io/docs/safety-20-policy-file
+
+# Security policy configuration
+security:
+  # Fail on vulnerabilities with CVSSv3 score >= 7.0 (HIGH and CRITICAL)
+  # CVSSv3 Severity Ratings:
+  # - 0.0: None
+  # - 0.1-3.9: Low
+  # - 4.0-6.9: Medium
+  # - 7.0-8.9: High
+  # - 9.0-10.0: Critical
+  ignore-cvss-severity-below: 7.0
+  
+  # Ignore specific vulnerabilities (with justification required)
+  # Format: CVE-YYYY-NNNNN or vulnerability ID
+  ignore-vulnerabilities:
+    # Example (remove if not needed):
+    # - id: 12345
+    #   reason: "False positive - we don't use the vulnerable function"
+    #   expires: "2025-12-31"
+  
+  # Continue checking even if some packages can't be checked
+  continue-on-vulnerability-error: false
+
+# Report configuration
+report:
+  # Output format: json, text, bare
+  output: json
+  
+  # Include full dependency tree in report
+  full-report: true
+  
+  # Include CVE information
+  include-cve: true
+
+# Scan configuration
+scan:
+  # Scan both direct and transitive dependencies
+  transitive: true
+  
+  # Scan installed packages (not just requirements.txt)
+  system: true
+

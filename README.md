@@ -10,7 +10,8 @@ A Python tool that processes diarized call center transcripts and identifies whi
 - **Robust Error Handling**: Comprehensive exception handling for API and validation errors
 - **AWS Lambda Ready**: Designed for deployment to AWS Lambda
 - **Test-Driven**: Built using BDD (Behavior-Driven Development) with pytest-bdd
-- **CI/CD Pipeline**: Automated testing and deployment with CodePipeline and GitHub Actions
+- **CI/CD Pipeline**: Unified pipeline with security scanning, testing, and automated deployment
+- **Security Scanning**: Automated vulnerability detection with CodeQL, Bandit, Safety, and pip-audit
 - **Semantic Versioning**: Automated releases based on conventional commits
 
 ## Installation
@@ -187,27 +188,45 @@ speaker-role-classifier/
 
 ## AWS Lambda Deployment
 
-Deploy as a serverless HTTP API using AWS CDK and Lambda Function URLs with optional CI/CD automation.
+Deploy as a serverless HTTP API using AWS CDK and Lambda Function URLs with automated CI/CD.
 
-### Deployment Options
+### Unified CI/CD Pipeline
 
-#### Option 1: Automated CI/CD (Recommended)
+This project uses a **unified pipeline** where all validation happens in GitHub Actions before deployment:
 
-Set up automated testing and deployment that triggers on every push to main:
-
-**AWS CodePipeline** (AWS-native):
-```bash
-cd infrastructure
-./setup-pipeline.sh
+```
+Push to main → Security Scans → Tests → Version Bump → AWS Deployment
 ```
 
-**GitHub Actions** (simpler):
-1. Configure GitHub Secrets (AWS credentials, OpenAI API key)
-2. Push to main - workflow runs automatically
+**Security Scanning** (automated):
+- CodeQL: GitHub's semantic code analysis with AI-powered fixes
+- Bandit: Python security linter (SQL injection, hardcoded passwords, etc.)
+- Safety: Dependency vulnerability scanner (CVSSv3 >= 7.0)
+- pip-audit: PyPA official vulnerability scanner
 
-See **[CI-CD-COMPARISON.md](CI-CD-COMPARISON.md)** to choose the best option for your needs.
+**Key Features**:
+- Version only advances after ALL validation passes
+- Security findings block deployment
+- AWS CodePipeline simplified to deployment-only (no tests that could fail)
+- Single source of truth for version and deployment status
 
-#### Option 2: Manual Deployment
+### Setup
+
+1. **Configure GitHub Secrets**:
+   - `AWS_ACCESS_KEY_ID`
+   - `AWS_SECRET_ACCESS_KEY`
+   - `AWS_REGION`
+   - `AWS_CODEPIPELINE_NAME`
+
+2. **Deploy AWS infrastructure**:
+   ```bash
+   cd infrastructure
+   ./setup-pipeline.sh
+   ```
+
+3. **Push to main** - unified pipeline runs automatically
+
+### Manual Deployment
 
 For one-time or manual deployments:
 
