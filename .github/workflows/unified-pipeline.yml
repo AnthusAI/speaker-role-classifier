@@ -71,23 +71,17 @@ jobs:
         with:
           node-version: '20'
       
-      - name: Install semantic-release
-        run: |
-          npm install -g \
-            semantic-release@23 \
-            @semantic-release/changelog@6 \
-            @semantic-release/git@10 \
-            @semantic-release/exec@6 \
-            conventional-changelog-conventionalcommits@7
-      
       - name: Run semantic-release
         id: semantic
+        uses: cycjimmy/semantic-release-action@v4
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-        run: |
-          npx semantic-release
-          # Capture outputs for downstream jobs
-          echo "new-release-published=$(npx semantic-release --dry-run | grep -q 'Published release' && echo 'true' || echo 'false')" >> $GITHUB_OUTPUT
+        with:
+          extra_plugins: |
+            @semantic-release/changelog@6
+            @semantic-release/git@10
+            @semantic-release/exec@6
+            conventional-changelog-conventionalcommits@7
       
       - name: Release summary
         run: |
