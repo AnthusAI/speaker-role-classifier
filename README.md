@@ -111,35 +111,41 @@ The tool raises specific exceptions for different error conditions:
 
 ### Running Tests
 
-By default, tests use mocked OpenAI API calls for speed and reliability:
+The test suite includes both **mocked tests** (fast, no API calls) and **integration tests** (slow, real API calls).
+
+#### Fast Mocked Tests (Recommended for Development)
 
 ```bash
-# Run all tests (with mocking)
-pytest
+# Run only mocked tests (14 tests, ~0.3 seconds)
+pytest -m "not integration"
 
-# Run with coverage
-pytest --cov=speaker_role_classifier --cov-report=html
+# With coverage
+pytest -m "not integration" --cov=speaker_role_classifier --cov-report=html
 
-# Run specific test scenarios
+# Run specific test file
 pytest tests/step_defs/test_classification_steps.py -v
 ```
 
-#### Integration Tests
+These tests use mocked OpenAI API responses and run in under 1 second. **This is what CI/CD runs by default.**
 
-To run integration tests that make real API calls:
+#### Integration Tests (Requires API Key)
 
 ```bash
-# Run ONLY integration tests (requires OPENAI_API_KEY)
+# Run ONLY integration tests (10 tests, ~3 minutes, requires OPENAI_API_KEY)
 pytest -m integration
 
-# Run ALL tests including integration tests
-pytest -m ""
-
-# Skip integration tests (default in CI/CD)
-pytest -m "not integration"
+# Run ALL tests including integration tests (24 tests, ~3 minutes)
+pytest
 ```
 
-**Note**: Integration tests require a valid `OPENAI_API_KEY` and will make real API calls (incurring costs).
+**⚠️ Warning**: Integration tests make real OpenAI API calls and will:
+- Take ~3 minutes to complete
+- Incur API costs (~$0.10-0.50 per full run)
+- Require a valid `OPENAI_API_KEY` environment variable
+
+**Test Breakdown:**
+- **Mocked tests**: 14 tests (classification, error handling, custom roles)
+- **Integration tests**: 10 tests (safeguard validation with real API calls)
 
 ### Project Structure
 
