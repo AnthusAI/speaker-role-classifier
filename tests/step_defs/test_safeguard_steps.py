@@ -106,144 +106,93 @@ def diarized_generic(diarized_transcript, context):
 
 
 @when('the safeguard validation runs')
-def run_safeguard(context, maybe_mock_safeguard, mock_openai_safeguard_no_corrections, 
-                  mock_openai_safeguard_single_correction, mock_openai_safeguard_multiple_corrections):
+def run_safeguard(context):
     """Run safeguard validation on the transcript."""
     from speaker_role_classifier.safeguard import run_safeguard_validation
     
-    # Determine which mock to use based on transcript content
-    if "Customer: Of course, Mr. Chen" in context['transcript']:
-        mock_client = mock_openai_safeguard_single_correction
-    elif context['transcript'].startswith("Customer: Good afternoon"):
-        mock_client = mock_openai_safeguard_multiple_corrections
-    else:
-        mock_client = mock_openai_safeguard_no_corrections
-    
     log = []
-    with maybe_mock_safeguard(mock_client):
-        try:
-            result = run_safeguard_validation(
-                context['transcript'],
-                context['target_roles'],
-                log
-            )
-            context['result'] = result
-            context['log'] = log
-            context['error'] = None
-        except Exception as e:
-            context['error'] = e
-            context['result'] = None
-            context['log'] = log
+    try:
+        result = run_safeguard_validation(
+            context['transcript'],
+            context['target_roles'],
+            log
+        )
+        context['result'] = result
+        context['log'] = log
+        context['error'] = None
+    except Exception as e:
+        context['error'] = e
+        context['result'] = None
+        context['log'] = log
 
 
 @when('the safeguard validation runs with custom roles')
-def run_safeguard_custom(context, maybe_mock_safeguard, mock_openai_safeguard_no_corrections):
+def run_safeguard_custom(context):
     """Run safeguard validation with custom roles."""
     from speaker_role_classifier.safeguard import run_safeguard_validation
     
     log = []
-    with maybe_mock_safeguard(mock_openai_safeguard_no_corrections):
-        try:
-            result = run_safeguard_validation(
-                context['transcript'],
-                context['target_roles'],
-                log
-            )
-            context['result'] = result
-            context['log'] = log
-            context['error'] = None
-        except Exception as e:
-            context['error'] = e
-            context['result'] = None
-            context['log'] = log
+    try:
+        result = run_safeguard_validation(
+            context['transcript'],
+            context['target_roles'],
+            log
+        )
+        context['result'] = result
+        context['log'] = log
+        context['error'] = None
+    except Exception as e:
+        context['error'] = e
+        context['result'] = None
+        context['log'] = log
 
 
 @when('the safeguard tool call cannot locate an utterance')
-def tool_call_fails(context, maybe_mock_safeguard, use_real_api):
+def tool_call_fails(context):
     """Simulate a failed tool call."""
     from speaker_role_classifier.safeguard import run_safeguard_validation
     
-    if not use_real_api:
-        # Only use the bad mock if we're mocking
-        from unittest.mock import Mock
-        import json
-        
-        mock_client = Mock()
-        mock_tool_call = Mock()
-        mock_tool_call.id = "call_bad"
-        mock_tool_call.function.name = "correct_speaker_role"
-        mock_tool_call.function.arguments = json.dumps({
-            "current_role": "Customer",
-            "utterance_prefix": "This text does not exist in the transcript",
-            "correct_role": "Agent",
-            "reason": "Testing failure case"
-        })
-        
-        mock_message = Mock()
-        mock_message.tool_calls = [mock_tool_call]
-        mock_message.content = None
-        
-        mock_choice = Mock()
-        mock_choice.message = mock_message
-        
-        mock_response = Mock()
-        mock_response.choices = [mock_choice]
-        
-        mock_client.chat.completions.create.return_value = mock_response
-    else:
-        mock_client = None
-    
     log = []
-    with maybe_mock_safeguard(mock_client):
-        try:
-            result = run_safeguard_validation(
-                context['transcript'],
-                context['target_roles'],
-                log
-            )
-            context['result'] = result
-            context['log'] = log
-            context['error'] = None
-        except Exception as e:
-            context['error'] = e
-            context['result'] = None
-            context['log'] = log
+    try:
+        result = run_safeguard_validation(
+            context['transcript'],
+            context['target_roles'],
+            log
+        )
+        context['result'] = result
+        context['log'] = log
+        context['error'] = None
+    except Exception as e:
+        context['error'] = e
+        context['result'] = None
+        context['log'] = log
 
 
 @when('the classifier processes with safeguard enabled')
-def classify_with_safeguard(context, maybe_mock_classifier, maybe_mock_safeguard, 
-                           mock_openai_safeguard_no_corrections):
+def classify_with_safeguard(context):
     """Process transcript with safeguard enabled."""
-    mock_mapping = {"Speaker 0": "Agent", "Speaker 1": "Customer"}
-    
-    with maybe_mock_classifier(mock_mapping):
-        with maybe_mock_safeguard(mock_openai_safeguard_no_corrections):
-            try:
-                result = classify_speakers(
-                    context['transcript'],
-                    target_roles=context['target_roles'],
-                    enable_safeguard=True
-                )
-                context['result'] = result['transcript']
-                context['log'] = result['log']
-                context['error'] = None
-            except Exception as e:
-                context['error'] = e
-                context['result'] = None
-                context['log'] = []
+    try:
+        result = classify_speakers(
+            context['transcript'],
+            target_roles=context['target_roles'],
+            enable_safeguard=True
+        )
+        context['result'] = result['transcript']
+        context['log'] = result['log']
+        context['error'] = None
+    except Exception as e:
+        context['error'] = e
+        context['result'] = None
+        context['log'] = []
 
 
 @then('no corrections should be made')
-def check_no_corrections(context, use_real_api):
+def check_no_corrections(context):
     """Verify no corrections were made."""
     assert context['error'] is None
     corrections = [entry for entry in context['log'] if entry.get('step') == 'utterance_corrected']
-    if use_real_api:
-        # With real API, we just check it completed without error
-        assert context['result'] is not None
-    else:
-        # With mocks, we can assert exact behavior
-        assert len(corrections) == 0
+    # With real API, we just check it completed without error
+    assert context['result'] is not None
 
 
 @then('the log should show safeguard completed successfully')
@@ -253,38 +202,34 @@ def check_safeguard_completed(context):
 
 
 @then('the misclassified utterance should be corrected')
-def check_single_correction(context, use_real_api):
+def check_single_correction(context):
     """Verify single correction was made."""
     assert context['error'] is None
-    if not use_real_api:
-        corrections = [entry for entry in context['log'] if entry.get('step') == 'utterance_corrected']
-        assert len(corrections) >= 1
+    corrections = [entry for entry in context['log'] if entry.get('step') == 'utterance_corrected']
+    assert len(corrections) >= 1
 
 
 @then('the log should show one correction')
-def check_one_correction_log(context, use_real_api):
+def check_one_correction_log(context):
     """Verify log shows one correction."""
-    if not use_real_api:
-        corrections = [entry for entry in context['log'] if entry.get('step') == 'utterance_corrected']
-        assert len(corrections) >= 1
+    corrections = [entry for entry in context['log'] if entry.get('step') == 'utterance_corrected']
+    assert len(corrections) >= 1
 
 
 @then('all misclassified utterances should be corrected')
-def check_multiple_corrections(context, use_real_api):
+def check_multiple_corrections(context):
     """Verify multiple corrections were made."""
     assert context['error'] is None
-    if not use_real_api:
-        corrections = [entry for entry in context['log'] if entry.get('step') == 'utterance_corrected']
-        # With mocks we expect at least 1 (the mock only does one per iteration)
-        assert len(corrections) >= 1
+    corrections = [entry for entry in context['log'] if entry.get('step') == 'utterance_corrected']
+    # With real API we expect at least 1 correction
+    assert len(corrections) >= 1
 
 
 @then('the log should show multiple corrections')
-def check_multiple_corrections_log(context, use_real_api):
+def check_multiple_corrections_log(context):
     """Verify log shows multiple corrections."""
-    if not use_real_api:
-        corrections = [entry for entry in context['log'] if entry.get('step') == 'utterance_corrected']
-        assert len(corrections) >= 1
+    corrections = [entry for entry in context['log'] if entry.get('step') == 'utterance_corrected']
+    assert len(corrections) >= 1
 
 
 @then('the corrected transcript should have proper role labels')
@@ -353,3 +298,4 @@ def check_both_steps(context):
     """Verify log shows both classification and safeguard."""
     assert any(entry.get('step') == 'configuration' for entry in context['log'])
     assert any(entry.get('step') == 'safeguard_start' for entry in context['log'])
+

@@ -18,6 +18,7 @@ def mock_openai_by_default(monkeypatch, request):
     """Mock OpenAI API calls by default unless test is marked as integration."""
     # Skip mocking if test is marked as integration
     if 'integration' in request.keywords:
+        yield None
         return
     
     # Create a smart mock that responds based on the prompt
