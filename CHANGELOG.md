@@ -1,3 +1,10 @@
+## [1.0.3](https://github.com/AnthusAI/speaker-role-classifier/compare/v1.0.2...v1.0.3) (2025-11-08)
+
+
+### Documentation
+
+* clarify that pytest runs integration tests by default ([a00f7ba](https://github.com/AnthusAI/speaker-role-classifier/commit/a00f7ba0fbc955002ce1df3460dd397cf18bf66e))
+
 ## [1.0.2](https://github.com/AnthusAI/speaker-role-classifier/compare/v1.0.1...v1.0.2) (2025-11-08)
 
 
