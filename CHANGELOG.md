@@ -1,3 +1,10 @@
+## [1.0.2](https://github.com/AnthusAI/speaker-role-classifier/compare/v1.0.1...v1.0.2) (2025-11-08)
+
+
+### Documentation
+
+* add AGENTS.md for AI coding agents ([224d72b](https://github.com/AnthusAI/speaker-role-classifier/commit/224d72bc8085c67222c2c08ed235ada53fcdabd8))
+
 ## [1.0.1](https://github.com/AnthusAI/speaker-role-classifier/compare/v1.0.0...v1.0.1) (2025-11-06)
 
 
