@@ -35,7 +35,7 @@ jobs:
           pytest tests/ -v --cov=speaker_role_classifier --cov-report=term --cov-report=xml -m "not integration"
       
       - name: Upload coverage reports
-        uses: codecov/codecov-action@v4
+        uses: codecov/codecov-action@v5
         if: always()
         with:
           file: ./coverage.xml
