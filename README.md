@@ -20,7 +20,7 @@ A Python tool that processes diarized call center transcripts and identifies whi
 
 ```bash
 # Navigate to the project directory
-cd /Users/ryan.porter/Projects/speaker-role-classifier
+cd speaker-role-classifier
 
 # Install the package in editable mode
 pip install -e .
@@ -281,3 +281,11 @@ See **[.github/COMMIT_CONVENTION.md](.github/COMMIT_CONVENTION.md)** for detaile
 ## License
 
 MIT
+
+---
+
+Built by [Anthus AI Solutions](https://anth.us). We run this class of system in production.
+
+A production-shaped example of giving an agent a tool.
+
+If you need this operated, not just cloned, [talk to us](https://anth.us).
